@@ -4,7 +4,8 @@ Rift Rush is a fast neon arena survival game. Dodge enemy swarms, defeat bosses,
 
 ## Play online
 
-https://rift-rush.chibachaseygaming.chatgpt.site
+- GitHub Pages: https://chibachaseygaming-arch.github.io/rift-rush/
+- Original public site: https://rift-rush.chibachaseygaming.chatgpt.site
 
 ## Features
 
@@ -42,3 +43,7 @@ npm test
 ```
 
 Progress and permanent upgrades are stored with `localStorage` in the player's browser.
+
+## Custom `.com` domain
+
+The GitHub Pages deployment supports a custom domain after its owner connects a purchased domain in the repository's Pages settings.
