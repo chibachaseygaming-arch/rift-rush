@@ -3,21 +3,27 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
+  Check,
   Crosshair,
+  Download,
   Gem,
   Heart,
   Move,
+  Palette,
   Pause,
   Play,
   RotateCcw,
+  Save,
   Shield,
   Sparkles,
+  Upload,
   Volume2,
   VolumeX,
   Zap,
 } from "lucide-react";
 
-type Mode = "menu" | "playing" | "paused" | "upgrade" | "permanent";
+type Mode = "menu" | "playing" | "paused" | "upgrade" | "permanent" | "customize";
+type ShipStyleId = "striker" | "phantom" | "nova" | "bulwark";
 type EnemyType = "spark" | "blaster" | "tank" | "splitter" | "boss";
 type DropType = "heal" | "rapid" | "shield" | "nova";
 type Vec = { x: number; y: number };
@@ -45,6 +51,7 @@ type PermanentUpgrade = {
   maxLevel: number;
 };
 type LastRun = { score: number; wave: number; earned: number };
+type ShipStyle = { id: ShipStyleId; name: string; description: string; icon: string; body: string; wing: string; glass: string; engine: string };
 
 type GameState = {
   width: number;
@@ -103,6 +110,13 @@ const PERMANENT_UPGRADES: PermanentUpgrade[] = [
   { id: "accuracy", name: "Targeting Core", description: "+12% starting accuracy", icon: "⌖", color: "#79f7d4", baseCost: 12, maxLevel: 10 },
 ];
 
+const SHIP_STYLES: ShipStyle[] = [
+  { id: "striker", name: "Rift Striker", description: "Balanced neon interceptor", icon: "◆", body: "#718cff", wing: "#405dd9", glass: "#baf8ff", engine: "#61e8ff" },
+  { id: "phantom", name: "Void Phantom", description: "Slim stealth fighter", icon: "◢", body: "#b06cff", wing: "#5a2f94", glass: "#ffd6ff", engine: "#df7dff" },
+  { id: "nova", name: "Solar Nova", description: "Bright high-energy racer", icon: "✦", body: "#ffb347", wing: "#d45137", glass: "#fff4a8", engine: "#ffe15c" },
+  { id: "bulwark", name: "Aegis Bulwark", description: "Wide armored starship", icon: "⬢", body: "#55d6a2", wing: "#187969", glass: "#d9fff5", engine: "#7dffcf" },
+];
+
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 const dist = (a: Vec, b: Vec) => Math.hypot(a.x - b.x, a.y - b.y);
 const random = (min: number, max: number) => min + Math.random() * (max - min);
@@ -150,6 +164,8 @@ export default function RiftRush() {
   const mutedRef = useRef(false);
   const shardsRef = useRef(0);
   const permanentRef = useRef<PermanentLevels>({ ...EMPTY_PERMANENT });
+  const shipStyleRef = useRef<ShipStyleId>("striker");
+  const importInputRef = useRef<HTMLInputElement>(null);
   const lastHudRef = useRef(0);
   const lastFrameRef = useRef(0);
   const rafRef = useRef(0);
@@ -159,6 +175,8 @@ export default function RiftRush() {
   const [highScore, setHighScore] = useState(0);
   const [shards, setShards] = useState(0);
   const [permanent, setPermanent] = useState<PermanentLevels>({ ...EMPTY_PERMANENT });
+  const [selectedShip, setSelectedShip] = useState<ShipStyleId>("striker");
+  const [saveStatus, setSaveStatus] = useState("Progress saves automatically");
   const [lastRun, setLastRun] = useState<LastRun | null>(null);
   const [choices, setChoices] = useState<Upgrade[]>([]);
   const [moveKnob, setMoveKnob] = useState<Vec>({ x: 0, y: 0 });
@@ -351,7 +369,81 @@ export default function RiftRush() {
     } catch {
       permanentRef.current = { ...EMPTY_PERMANENT };
     }
+    const savedShip = localStorage.getItem("rift-rush-ship") as ShipStyleId | null;
+    if (savedShip && SHIP_STYLES.some((ship) => ship.id === savedShip)) {
+      shipStyleRef.current = savedShip;
+      setSelectedShip(savedShip);
+    }
   }, []);
+
+  const saveProgress = useCallback(() => {
+    localStorage.setItem("rift-rush-high-score", String(highScore));
+    localStorage.setItem("rift-rush-shards", String(shardsRef.current));
+    localStorage.setItem("rift-rush-permanent", JSON.stringify(permanentRef.current));
+    localStorage.setItem("rift-rush-ship", shipStyleRef.current);
+    setSaveStatus("Saved on this device ✓");
+  }, [highScore]);
+
+  const chooseShip = useCallback((ship: ShipStyleId) => {
+    shipStyleRef.current = ship;
+    setSelectedShip(ship);
+    localStorage.setItem("rift-rush-ship", ship);
+    setSaveStatus("Ship selected and saved ✓");
+    sfx("pickup");
+  }, [sfx]);
+
+  const exportProgress = useCallback(() => {
+    const data = {
+      format: "rift-rush-save",
+      version: 1,
+      highScore,
+      shards: shardsRef.current,
+      permanent: permanentRef.current,
+      ship: shipStyleRef.current,
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "rift-rush-save.json";
+    link.click();
+    URL.revokeObjectURL(url);
+    setSaveStatus("Save file exported ✓");
+  }, [highScore]);
+
+  const importProgress = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      const raw = JSON.parse(await file.text()) as Record<string, unknown>;
+      if (raw.format !== "rift-rush-save" || raw.version !== 1) throw new Error("Invalid save");
+      const nextHighScore = clamp(Math.floor(Number(raw.highScore) || 0), 0, 999999999);
+      const nextShards = clamp(Math.floor(Number(raw.shards) || 0), 0, 999999999);
+      const rawPermanent = raw.permanent && typeof raw.permanent === "object" ? raw.permanent as Partial<PermanentLevels> : {};
+      const nextPermanent = { ...EMPTY_PERMANENT };
+      for (const key of Object.keys(nextPermanent) as Array<keyof PermanentLevels>) {
+        nextPermanent[key] = clamp(Math.floor(Number(rawPermanent[key]) || 0), 0, 10);
+      }
+      const nextShip = SHIP_STYLES.some((ship) => ship.id === raw.ship) ? raw.ship as ShipStyleId : "striker";
+      setHighScore(nextHighScore);
+      shardsRef.current = nextShards;
+      setShards(nextShards);
+      permanentRef.current = nextPermanent;
+      setPermanent(nextPermanent);
+      shipStyleRef.current = nextShip;
+      setSelectedShip(nextShip);
+      localStorage.setItem("rift-rush-high-score", String(nextHighScore));
+      localStorage.setItem("rift-rush-shards", String(nextShards));
+      localStorage.setItem("rift-rush-permanent", JSON.stringify(nextPermanent));
+      localStorage.setItem("rift-rush-ship", nextShip);
+      setSaveStatus("Save imported successfully ✓");
+      sfx("pickup");
+    } catch {
+      setSaveStatus("That file is not a Rift Rush save");
+    } finally {
+      event.target.value = "";
+    }
+  }, [sfx]);
 
   const buyPermanentUpgrade = useCallback((upgrade: PermanentUpgrade) => {
     const currentLevel = permanentRef.current[upgrade.id];
@@ -575,11 +667,14 @@ export default function RiftRush() {
         ctx.stroke();
       }
       ctx.shadowBlur = 22;
-      ctx.shadowColor = p.invulnerable > 0 ? "#ffffff" : "#6e8cff";
+      const shipStyle = SHIP_STYLES.find((ship) => ship.id === shipStyleRef.current) ?? SHIP_STYLES[0];
+      const wingSpan = shipStyle.id === "bulwark" ? 27 : shipStyle.id === "phantom" ? 17 : 22;
+      const noseLength = shipStyle.id === "nova" ? 31 : shipStyle.id === "bulwark" ? 23 : 27;
+      ctx.shadowColor = p.invulnerable > 0 ? "#ffffff" : shipStyle.body;
 
       // Twin engine flames make the rear of the ship instantly readable.
       const flamePulse = 5 + Math.sin(g.time * 24) * 2;
-      ctx.fillStyle = p.rapid > 0 ? "#ffe15c" : "#61e8ff";
+      ctx.fillStyle = p.rapid > 0 ? "#ffe15c" : shipStyle.engine;
       for (const engineY of [-8, 8]) {
         ctx.beginPath();
         ctx.moveTo(-15, engineY - 3);
@@ -590,13 +685,13 @@ export default function RiftRush() {
       }
 
       // Wide swept wings and tail fins give the player a clear spaceship silhouette.
-      ctx.fillStyle = "#405dd9";
+      ctx.fillStyle = shipStyle.wing;
       ctx.strokeStyle = "rgba(190,226,255,.9)";
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.moveTo(8, -5);
-      ctx.lineTo(-7, -22);
-      ctx.lineTo(-13, -21);
+      ctx.lineTo(-7, -wingSpan);
+      ctx.lineTo(-13, -wingSpan + 1);
       ctx.lineTo(-9, -7);
       ctx.lineTo(-17, -12);
       ctx.lineTo(-17, -5);
@@ -604,17 +699,17 @@ export default function RiftRush() {
       ctx.lineTo(-17, 5);
       ctx.lineTo(-17, 12);
       ctx.lineTo(-9, 7);
-      ctx.lineTo(-13, 21);
-      ctx.lineTo(-7, 22);
+      ctx.lineTo(-13, wingSpan - 1);
+      ctx.lineTo(-7, wingSpan);
       ctx.lineTo(8, 5);
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
 
       // Solid central fuselage with a pointed nose.
-      ctx.fillStyle = p.invulnerable > 0 && Math.floor(g.time * 20) % 2 ? "#ffffff" : "#718cff";
+      ctx.fillStyle = p.invulnerable > 0 && Math.floor(g.time * 20) % 2 ? "#ffffff" : shipStyle.body;
       ctx.beginPath();
-      ctx.moveTo(27, 0);
+      ctx.moveTo(noseLength, 0);
       ctx.lineTo(8, -8);
       ctx.lineTo(-15, -6);
       ctx.lineTo(-18, 0);
@@ -626,8 +721,8 @@ export default function RiftRush() {
 
       // Bright glass cockpit and two visible engine pods finish the ship shape.
       ctx.shadowBlur = 12;
-      ctx.shadowColor = "#75f2ff";
-      ctx.fillStyle = "#baf8ff";
+      ctx.shadowColor = shipStyle.engine;
+      ctx.fillStyle = shipStyle.glass;
       ctx.beginPath();
       ctx.ellipse(8, 0, 7, 4.5, 0, 0, Math.PI * 2);
       ctx.fill();
@@ -638,7 +733,7 @@ export default function RiftRush() {
       for (const engineY of [-8, 8]) {
         ctx.fillStyle = "#182452";
         ctx.fillRect(-17, engineY - 3, 8, 6);
-        ctx.strokeStyle = "#61e8ff";
+        ctx.strokeStyle = shipStyle.engine;
         ctx.strokeRect(-17, engineY - 3, 8, 6);
       }
       ctx.restore();
@@ -964,7 +1059,17 @@ export default function RiftRush() {
               <button className="secondary-button upgrades-button" onClick={() => setMode("permanent")}>
                 <Gem size={19} /> PERMANENT UPGRADES
               </button>
+              <button className="secondary-button customize-button" onClick={() => setMode("customize")}>
+                <Palette size={19} /> CUSTOMIZE SHIP
+              </button>
             </div>
+            <div className="save-tools">
+              <button onClick={saveProgress}><Save size={17} /> SAVE</button>
+              <button onClick={exportProgress}><Download size={17} /> EXPORT</button>
+              <button onClick={() => importInputRef.current?.click()}><Upload size={17} /> IMPORT</button>
+              <input ref={importInputRef} type="file" accept="application/json,.json" onChange={importProgress} aria-label="Import a Rift Rush save file" />
+            </div>
+            <p className="save-status" aria-live="polite">{saveStatus}</p>
             <div className="controls-card">
               <div><Move size={19} /><span><b>Move</b> WASD / arrows</span></div>
               <div><Crosshair size={19} /><span><b>Shoot</b> aim + hold click</span></div>
@@ -1007,6 +1112,32 @@ export default function RiftRush() {
                     <span className={`buy-cost ${maxed ? "maxed" : ""}`}>
                       {maxed ? "MAX" : <><Gem size={14} fill="currentColor" /> {cost}</>}
                     </span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {mode === "customize" && (
+          <section className="overlay permanent-overlay customize-overlay">
+            <button className="back-button" onClick={() => setMode("menu")}><ArrowLeft size={19} /> MAIN MENU</button>
+            <p className="eyebrow">CHOOSE YOUR PILOT STYLE</p>
+            <h2>SHIP CUSTOMIZATION</h2>
+            <p>Your chosen ship saves automatically and appears in every run.</p>
+            <div className="ship-grid">
+              {SHIP_STYLES.map((ship) => {
+                const active = selectedShip === ship.id;
+                return (
+                  <button
+                    className={`ship-card ${active ? "selected" : ""}`}
+                    key={ship.id}
+                    onClick={() => chooseShip(ship.id)}
+                    style={{ "--ship-body": ship.body, "--ship-wing": ship.wing, "--ship-engine": ship.engine } as React.CSSProperties}
+                  >
+                    <span className="ship-preview" aria-hidden="true">{ship.icon}</span>
+                    <span className="ship-card-copy"><strong>{ship.name}</strong><small>{ship.description}</small></span>
+                    <span className="ship-selected">{active ? <><Check size={16} /> SELECTED</> : "CHOOSE"}</span>
                   </button>
                 );
               })}
