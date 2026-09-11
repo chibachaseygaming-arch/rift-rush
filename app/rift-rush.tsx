@@ -576,21 +576,71 @@ export default function RiftRush() {
       }
       ctx.shadowBlur = 22;
       ctx.shadowColor = p.invulnerable > 0 ? "#ffffff" : "#6e8cff";
+
+      // Twin engine flames make the rear of the ship instantly readable.
+      const flamePulse = 5 + Math.sin(g.time * 24) * 2;
+      ctx.fillStyle = p.rapid > 0 ? "#ffe15c" : "#61e8ff";
+      for (const engineY of [-8, 8]) {
+        ctx.beginPath();
+        ctx.moveTo(-15, engineY - 3);
+        ctx.lineTo(-27 - flamePulse, engineY);
+        ctx.lineTo(-15, engineY + 3);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      // Wide swept wings and tail fins give the player a clear spaceship silhouette.
+      ctx.fillStyle = "#405dd9";
+      ctx.strokeStyle = "rgba(190,226,255,.9)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(8, -5);
+      ctx.lineTo(-7, -22);
+      ctx.lineTo(-13, -21);
+      ctx.lineTo(-9, -7);
+      ctx.lineTo(-17, -12);
+      ctx.lineTo(-17, -5);
+      ctx.lineTo(-8, 0);
+      ctx.lineTo(-17, 5);
+      ctx.lineTo(-17, 12);
+      ctx.lineTo(-9, 7);
+      ctx.lineTo(-13, 21);
+      ctx.lineTo(-7, 22);
+      ctx.lineTo(8, 5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Solid central fuselage with a pointed nose.
       ctx.fillStyle = p.invulnerable > 0 && Math.floor(g.time * 20) % 2 ? "#ffffff" : "#718cff";
       ctx.beginPath();
-      ctx.moveTo(23, 0);
-      ctx.lineTo(-12, -13);
-      ctx.lineTo(-7, 0);
-      ctx.lineTo(-12, 13);
+      ctx.moveTo(27, 0);
+      ctx.lineTo(8, -8);
+      ctx.lineTo(-15, -6);
+      ctx.lineTo(-18, 0);
+      ctx.lineTo(-15, 6);
+      ctx.lineTo(8, 8);
       ctx.closePath();
       ctx.fill();
-      ctx.fillStyle = p.rapid > 0 ? "#ffe15c" : "#61e8ff";
+      ctx.stroke();
+
+      // Bright glass cockpit and two visible engine pods finish the ship shape.
+      ctx.shadowBlur = 12;
+      ctx.shadowColor = "#75f2ff";
+      ctx.fillStyle = "#baf8ff";
       ctx.beginPath();
-      ctx.moveTo(-9, -7);
-      ctx.lineTo(-22 - Math.random() * 8, 0);
-      ctx.lineTo(-9, 7);
-      ctx.closePath();
+      ctx.ellipse(8, 0, 7, 4.5, 0, 0, Math.PI * 2);
       ctx.fill();
+      ctx.strokeStyle = "#143d75";
+      ctx.lineWidth = 1.25;
+      ctx.stroke();
+      ctx.shadowBlur = 6;
+      for (const engineY of [-8, 8]) {
+        ctx.fillStyle = "#182452";
+        ctx.fillRect(-17, engineY - 3, 8, 6);
+        ctx.strokeStyle = "#61e8ff";
+        ctx.strokeRect(-17, engineY - 3, 8, 6);
+      }
       ctx.restore();
       ctx.restore();
     };
