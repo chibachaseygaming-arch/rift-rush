@@ -41,15 +41,20 @@ type PermanentLevels = {
   fireRate: number;
   dash: number;
   accuracy: number;
+  bulletSpeed: number;
+  multishot: number;
+  pierce: number;
+  shield: number;
 };
 type PermanentUpgrade = {
-  id: keyof PermanentLevels;
+  id: string;
+  stat: keyof PermanentLevels;
+  tier: number;
   name: string;
   description: string;
   icon: string;
   color: string;
-  baseCost: number;
-  maxLevel: number;
+  cost: number;
 };
 type LastRun = { score: number; wave: number; earned: number };
 type ShipStyle = { id: ShipStyleId; shape: string; name: string; description: string; icon: string; body: string; wing: string; glass: string; engine: string };
@@ -127,16 +132,53 @@ const EMPTY_PERMANENT: PermanentLevels = {
   fireRate: 0,
   dash: 0,
   accuracy: 0,
+  bulletSpeed: 0,
+  multishot: 0,
+  pierce: 0,
+  shield: 0,
 };
 
-const PERMANENT_UPGRADES: PermanentUpgrade[] = [
-  { id: "damage", name: "Power Core", description: "+10% starting damage", icon: "◆", color: "#ff5c8a", baseCost: 12, maxLevel: 10 },
-  { id: "health", name: "Armor Core", description: "+12 starting health", icon: "♥", color: "#ff8aa8", baseCost: 10, maxLevel: 10 },
-  { id: "speed", name: "Turbo Drive", description: "+6% movement speed", icon: "➜", color: "#5cffa6", baseCost: 10, maxLevel: 10 },
-  { id: "fireRate", name: "Rapid Trigger", description: "+6% firing speed", icon: "⚡", color: "#ffe15c", baseCost: 14, maxLevel: 10 },
-  { id: "dash", name: "Blink Engine", description: "+6% dash recharge", icon: "◈", color: "#8ca7ff", baseCost: 14, maxLevel: 10 },
-  { id: "accuracy", name: "Targeting Core", description: "+12% starting accuracy", icon: "⌖", color: "#79f7d4", baseCost: 12, maxLevel: 10 },
+const PERMANENT_FAMILIES: Array<Omit<PermanentUpgrade, "id" | "tier" | "name" | "cost"> & { id: string; name: string; baseCost: number }> = [
+  { id: "power-core", stat: "damage", name: "Power Core", description: "+10% starting damage", icon: "◆", color: "#ff5c8a", baseCost: 10 },
+  { id: "rift-amplifier", stat: "damage", name: "Rift Amplifier", description: "+10% starting damage", icon: "◇", color: "#ff7ca4", baseCost: 16 },
+  { id: "armor-core", stat: "health", name: "Armor Core", description: "+12 starting health", icon: "♥", color: "#ff8aa8", baseCost: 9 },
+  { id: "nano-plating", stat: "health", name: "Nano Plating", description: "+12 starting health", icon: "⬡", color: "#ff668f", baseCost: 15 },
+  { id: "turbo-drive", stat: "speed", name: "Turbo Drive", description: "+6% movement speed", icon: "➜", color: "#5cffa6", baseCost: 10 },
+  { id: "phase-skates", stat: "speed", name: "Phase Skates", description: "+6% movement speed", icon: "»", color: "#55ffd8", baseCost: 16 },
+  { id: "rapid-trigger", stat: "fireRate", name: "Rapid Trigger", description: "+6% firing speed", icon: "⚡", color: "#ffe15c", baseCost: 12 },
+  { id: "pulse-loader", stat: "fireRate", name: "Pulse Loader", description: "+6% firing speed", icon: "≋", color: "#ffc45c", baseCost: 18 },
+  { id: "blink-engine", stat: "dash", name: "Blink Engine", description: "+6% dash recharge", icon: "◈", color: "#8ca7ff", baseCost: 12 },
+  { id: "warp-cell", stat: "dash", name: "Warp Cell", description: "+6% dash recharge", icon: "⬖", color: "#a593ff", baseCost: 18 },
+  { id: "targeting-core", stat: "accuracy", name: "Targeting Core", description: "+12% starting accuracy", icon: "⌖", color: "#79f7d4", baseCost: 11 },
+  { id: "oracle-lens", stat: "accuracy", name: "Oracle Lens", description: "+12% starting accuracy", icon: "⊙", color: "#9effe8", baseCost: 17 },
+  { id: "hyper-barrel", stat: "bulletSpeed", name: "Hyper Barrel", description: "+8% bullet speed", icon: "●", color: "#ff9b55", baseCost: 11 },
+  { id: "comet-chamber", stat: "bulletSpeed", name: "Comet Chamber", description: "+8% bullet speed", icon: "◌", color: "#ffbd70", baseCost: 17 },
+  { id: "split-array", stat: "multishot", name: "Split Array", description: "+1 starting projectile", icon: "✦", color: "#cb78ff", baseCost: 24 },
+  { id: "prism-array", stat: "multishot", name: "Prism Array", description: "+1 starting projectile", icon: "✧", color: "#e38cff", baseCost: 32 },
+  { id: "phase-bore", stat: "pierce", name: "Phase Bore", description: "+1 starting pierce", icon: "◎", color: "#61e8ff", baseCost: 20 },
+  { id: "ghost-bore", stat: "pierce", name: "Ghost Bore", description: "+1 starting pierce", icon: "◉", color: "#89f4ff", baseCost: 28 },
+  { id: "shield-bank", stat: "shield", name: "Shield Bank", description: "+1 second starting shield", icon: "⬢", color: "#75c8ff", baseCost: 18 },
+  { id: "aegis-bank", stat: "shield", name: "Aegis Bank", description: "+1 second starting shield", icon: "⬣", color: "#52a8ff", baseCost: 26 },
 ];
+
+const PERMANENT_UPGRADES: PermanentUpgrade[] = PERMANENT_FAMILIES.flatMap((family) =>
+  Array.from({ length: 5 }, (_, index) => ({
+    id: `${family.id}-${index + 1}`,
+    stat: family.stat,
+    tier: index + 1,
+    name: `${family.name} MK ${index + 1}`,
+    description: family.description,
+    icon: family.icon,
+    color: family.color,
+    cost: Math.round(family.baseCost * (1 + index * 0.8)),
+  })),
+);
+
+const resolvePermanentPurchases = (value: unknown): Record<string, boolean> => {
+  if (!value || typeof value !== "object") return {};
+  const raw = value as Record<string, unknown>;
+  return Object.fromEntries(PERMANENT_UPGRADES.filter((upgrade) => raw[upgrade.id] === true).map((upgrade) => [upgrade.id, true]));
+};
 
 const SHIP_CHASSIS = [
   { id: "striker", name: "Striker", description: "balanced interceptor", icon: "◆" },
@@ -188,9 +230,6 @@ const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(ma
 const dist = (a: Vec, b: Vec) => Math.hypot(a.x - b.x, a.y - b.y);
 const random = (min: number, max: number) => min + Math.random() * (max - min);
 const chooseThree = () => [...UPGRADES].sort(() => Math.random() - 0.5).slice(0, 3);
-const permanentCost = (upgrade: PermanentUpgrade, level: number) =>
-  Math.round(upgrade.baseCost * (1 + level * 0.7));
-
 function newGame(width: number, height: number, permanent: PermanentLevels = EMPTY_PERMANENT): GameState {
   const maxHp = 100 + permanent.health * 12;
   return {
@@ -200,8 +239,10 @@ function newGame(width: number, height: number, permanent: PermanentLevels = EMP
     player: {
       x: width / 2, y: height / 2, r: 15, hp: maxHp, maxHp, speed: 260 * (1 + permanent.speed * 0.06),
       angle: -Math.PI / 2, fireRate: 0.19 * Math.pow(0.94, permanent.fireRate), fireTimer: 0, damage: 24 * (1 + permanent.damage * 0.1),
-      bulletSpeed: 720, multishot: 1, pierce: 0, accuracy: Math.pow(0.88, permanent.accuracy), dashTimer: 0,
-      dashCooldown: 1.8 * Math.pow(0.94, permanent.dash), dashTime: 0, invulnerable: 0, shield: 0, rapid: 0,
+      bulletSpeed: 720 * (1 + permanent.bulletSpeed * 0.08), multishot: 1 + permanent.multishot,
+      pierce: permanent.pierce, accuracy: Math.pow(0.88, permanent.accuracy), dashTimer: 0,
+      dashCooldown: 1.8 * Math.pow(0.94, permanent.dash), dashTime: 0, invulnerable: 0,
+      shield: permanent.shield, rapid: 0,
     },
     bullets: [],
     enemies: [],
@@ -231,6 +272,7 @@ export default function RiftRush() {
   const mutedRef = useRef(false);
   const shardsRef = useRef(0);
   const permanentRef = useRef<PermanentLevels>({ ...EMPTY_PERMANENT });
+  const permanentPurchasesRef = useRef<Record<string, boolean>>({});
   const shipStyleRef = useRef<ShipStyleId>(DEFAULT_SHIP_ID);
   const importInputRef = useRef<HTMLInputElement>(null);
   const lastHudRef = useRef(0);
@@ -242,6 +284,7 @@ export default function RiftRush() {
   const [highScore, setHighScore] = useState(0);
   const [shards, setShards] = useState(0);
   const [permanent, setPermanent] = useState<PermanentLevels>({ ...EMPTY_PERMANENT });
+  const [permanentPurchases, setPermanentPurchases] = useState<Record<string, boolean>>({});
   const [selectedShip, setSelectedShip] = useState<ShipStyleId>(DEFAULT_SHIP_ID);
   const [saveStatus, setSaveStatus] = useState("Progress saves automatically");
   const [lastRun, setLastRun] = useState<LastRun | null>(null);
@@ -435,12 +478,19 @@ export default function RiftRush() {
       const loaded = { ...EMPTY_PERMANENT };
       for (const key of Object.keys(loaded) as Array<keyof PermanentLevels>) {
         const value = Number(savedPermanent[key] ?? 0);
-        loaded[key] = clamp(Number.isFinite(value) ? Math.floor(value) : 0, 0, 10);
+        loaded[key] = clamp(Number.isFinite(value) ? Math.floor(value) : 0, 0, 20);
       }
       permanentRef.current = loaded;
       setPermanent(loaded);
     } catch {
       permanentRef.current = { ...EMPTY_PERMANENT };
+    }
+    try {
+      const loadedPurchases = resolvePermanentPurchases(JSON.parse(localStorage.getItem("rift-rush-permanent-purchases") || "{}"));
+      permanentPurchasesRef.current = loadedPurchases;
+      setPermanentPurchases(loadedPurchases);
+    } catch {
+      permanentPurchasesRef.current = {};
     }
     const savedShip = localStorage.getItem("rift-rush-ship");
     const nextShip = resolveShipId(savedShip);
@@ -453,6 +503,7 @@ export default function RiftRush() {
     localStorage.setItem("rift-rush-high-score", String(highScore));
     localStorage.setItem("rift-rush-shards", String(shardsRef.current));
     localStorage.setItem("rift-rush-permanent", JSON.stringify(permanentRef.current));
+    localStorage.setItem("rift-rush-permanent-purchases", JSON.stringify(permanentPurchasesRef.current));
     localStorage.setItem("rift-rush-ship", shipStyleRef.current);
     setSaveStatus("Saved on this device ✓");
   }, [highScore]);
@@ -472,6 +523,7 @@ export default function RiftRush() {
       highScore,
       shards: shardsRef.current,
       permanent: permanentRef.current,
+      permanentPurchases: permanentPurchasesRef.current,
       ship: shipStyleRef.current,
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
@@ -495,19 +547,23 @@ export default function RiftRush() {
       const rawPermanent = raw.permanent && typeof raw.permanent === "object" ? raw.permanent as Partial<PermanentLevels> : {};
       const nextPermanent = { ...EMPTY_PERMANENT };
       for (const key of Object.keys(nextPermanent) as Array<keyof PermanentLevels>) {
-        nextPermanent[key] = clamp(Math.floor(Number(rawPermanent[key]) || 0), 0, 10);
+        nextPermanent[key] = clamp(Math.floor(Number(rawPermanent[key]) || 0), 0, 20);
       }
+      const nextPurchases = resolvePermanentPurchases(raw.permanentPurchases);
       const nextShip = resolveShipId(raw.ship);
       setHighScore(nextHighScore);
       shardsRef.current = nextShards;
       setShards(nextShards);
       permanentRef.current = nextPermanent;
       setPermanent(nextPermanent);
+      permanentPurchasesRef.current = nextPurchases;
+      setPermanentPurchases(nextPurchases);
       shipStyleRef.current = nextShip;
       setSelectedShip(nextShip);
       localStorage.setItem("rift-rush-high-score", String(nextHighScore));
       localStorage.setItem("rift-rush-shards", String(nextShards));
       localStorage.setItem("rift-rush-permanent", JSON.stringify(nextPermanent));
+      localStorage.setItem("rift-rush-permanent-purchases", JSON.stringify(nextPurchases));
       localStorage.setItem("rift-rush-ship", nextShip);
       setSaveStatus("Save imported successfully ✓");
       sfx("pickup");
@@ -519,21 +575,23 @@ export default function RiftRush() {
   }, [sfx]);
 
   const buyPermanentUpgrade = useCallback((upgrade: PermanentUpgrade) => {
-    const currentLevel = permanentRef.current[upgrade.id];
-    if (currentLevel >= upgrade.maxLevel) return;
-    const cost = permanentCost(upgrade, currentLevel);
-    if (shardsRef.current < cost) return;
-    const nextShards = shardsRef.current - cost;
+    if (permanentPurchasesRef.current[upgrade.id]) return;
+    if (shardsRef.current < upgrade.cost) return;
+    const nextShards = shardsRef.current - upgrade.cost;
     const nextPermanent = {
       ...permanentRef.current,
-      [upgrade.id]: currentLevel + 1,
+      [upgrade.stat]: permanentRef.current[upgrade.stat] + 1,
     };
+    const nextPurchases = { ...permanentPurchasesRef.current, [upgrade.id]: true };
     shardsRef.current = nextShards;
     permanentRef.current = nextPermanent;
+    permanentPurchasesRef.current = nextPurchases;
     setShards(nextShards);
     setPermanent(nextPermanent);
+    setPermanentPurchases(nextPurchases);
     localStorage.setItem("rift-rush-shards", String(nextShards));
     localStorage.setItem("rift-rush-permanent", JSON.stringify(nextPermanent));
+    localStorage.setItem("rift-rush-permanent-purchases", JSON.stringify(nextPurchases));
     sfx("pickup");
   }, [sfx]);
 
@@ -1130,7 +1188,7 @@ export default function RiftRush() {
                 {lastRun ? "RESTART" : "PLAY NOW"}
               </button>
               <button className="secondary-button upgrades-button" onClick={() => setMode("permanent")}>
-                <Gem size={19} /> PERMANENT UPGRADES
+                <Gem size={19} /> PERMANENT UPGRADES (100)
               </button>
               <button className="secondary-button customize-button" onClick={() => setMode("customize")}>
                 <Palette size={19} /> CUSTOMIZE SHIP (100)
@@ -1158,14 +1216,12 @@ export default function RiftRush() {
             <button className="back-button" onClick={() => setMode("menu")}><ArrowLeft size={19} /> MAIN MENU</button>
             <div className="shard-bank"><Gem size={20} fill="currentColor" /><span>RIFT SHARDS</span><strong>{shards.toLocaleString()}</strong></div>
             <p className="eyebrow">YOUR POWER STAYS FOREVER</p>
-            <h2>PERMANENT UPGRADES</h2>
-            <p>Every upgrade applies at the start of all future runs.</p>
+            <h2>100 PERMANENT UPGRADES</h2>
+            <p>{Object.keys(permanentPurchases).length} / 100 collected • Every upgrade powers up all future runs.</p>
             <div className="permanent-grid">
               {PERMANENT_UPGRADES.map((upgrade) => {
-                const level = permanent[upgrade.id];
-                const maxed = level >= upgrade.maxLevel;
-                const cost = permanentCost(upgrade, level);
-                const affordable = shards >= cost;
+                const maxed = permanentPurchases[upgrade.id] === true;
+                const affordable = shards >= upgrade.cost;
                 return (
                   <button
                     className="permanent-card"
@@ -1178,12 +1234,12 @@ export default function RiftRush() {
                     <span className="permanent-copy">
                       <strong>{upgrade.name}</strong>
                       <small>{upgrade.description}</small>
-                      <span className="level-pips" aria-label={`Level ${level} of ${upgrade.maxLevel}`}>
-                        {Array.from({ length: upgrade.maxLevel }, (_, index) => <i className={index < level ? "filled" : ""} key={index} />)}
+                      <span className="level-pips" aria-label={maxed ? "Collected" : `Tier ${upgrade.tier}`}>
+                        {Array.from({ length: 5 }, (_, index) => <i className={index < upgrade.tier ? "filled" : ""} key={index} />)}
                       </span>
                     </span>
                     <span className={`buy-cost ${maxed ? "maxed" : ""}`}>
-                      {maxed ? "MAX" : <><Gem size={14} fill="currentColor" /> {cost}</>}
+                      {maxed ? "OWNED" : <><Gem size={14} fill="currentColor" /> {upgrade.cost}</>}
                     </span>
                   </button>
                 );
