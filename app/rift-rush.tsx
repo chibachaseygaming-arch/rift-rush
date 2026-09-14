@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 
 type Mode = "menu" | "playing" | "paused" | "upgrade" | "permanent" | "customize";
-type ShipStyleId = "striker" | "phantom" | "nova" | "bulwark";
+type ShipStyleId = string;
 type EnemyType = "spark" | "blaster" | "tank" | "splitter" | "boss";
 type DropType = "heal" | "rapid" | "shield" | "nova";
 type Vec = { x: number; y: number };
@@ -32,7 +32,8 @@ type Enemy = Vec & { vx: number; vy: number; r: number; hp: number; maxHp: numbe
 type Particle = Vec & { vx: number; vy: number; life: number; maxLife: number; size: number; color: string };
 type Drop = Vec & { type: DropType; r: number; life: number; spin: number };
 type Star = Vec & { size: number; alpha: number };
-type Upgrade = { id: string; name: string; description: string; icon: string; color: string };
+type UpgradeKind = "damage" | "rapid" | "speed" | "health" | "multi" | "pierce" | "dash" | "velocity" | "accuracy" | "shield" | "heal";
+type Upgrade = { id: string; kind: UpgradeKind; power: number; name: string; description: string; icon: string; color: string };
 type PermanentLevels = {
   damage: number;
   health: number;
@@ -51,7 +52,7 @@ type PermanentUpgrade = {
   maxLevel: number;
 };
 type LastRun = { score: number; wave: number; earned: number };
-type ShipStyle = { id: ShipStyleId; name: string; description: string; icon: string; body: string; wing: string; glass: string; engine: string };
+type ShipStyle = { id: ShipStyleId; shape: string; name: string; description: string; icon: string; body: string; wing: string; glass: string; engine: string };
 
 type GameState = {
   width: number;
@@ -80,17 +81,44 @@ type GameState = {
   waveStarted: boolean;
 };
 
-const UPGRADES: Upgrade[] = [
-  { id: "damage", name: "Heavy Shots", description: "+30% blaster damage", icon: "◆", color: "#ff5c8a" },
-  { id: "rapid", name: "Overclock", description: "+22% firing speed", icon: "⚡", color: "#ffe15c" },
-  { id: "speed", name: "Turbo Boots", description: "+14% movement speed", icon: "➜", color: "#5cffa6" },
-  { id: "health", name: "Heart Core", description: "+25 max health and heal", icon: "♥", color: "#ff668f" },
-  { id: "multi", name: "Split Beam", description: "+1 projectile per shot", icon: "✦", color: "#cb78ff" },
-  { id: "pierce", name: "Phase Rounds", description: "Shots pierce +1 enemy", icon: "◎", color: "#61e8ff" },
-  { id: "dash", name: "Blink Drive", description: "Dash recharges 20% faster", icon: "◈", color: "#8ca7ff" },
-  { id: "velocity", name: "Hyper Rounds", description: "+22% bullet speed and size", icon: "●", color: "#ff9b55" },
-  { id: "accuracy", name: "Precision Sight", description: "25% tighter shot spread", icon: "⌖", color: "#79f7d4" },
+const UPGRADE_FAMILIES: Array<{ id: string; name: string; kind: UpgradeKind; icon: string; color: string; base: number; step: number }> = [
+  { id: "heavy", name: "Heavy Shots", kind: "damage", icon: "◆", color: "#ff5c8a", base: 0.12, step: 0.025 },
+  { id: "reactor", name: "Rift Reactor", kind: "damage", icon: "◇", color: "#ff7ca4", base: 0.1, step: 0.03 },
+  { id: "overclock", name: "Overclock", kind: "rapid", icon: "⚡", color: "#ffe15c", base: 0.08, step: 0.018 },
+  { id: "pulse", name: "Pulse Accelerator", kind: "rapid", icon: "≋", color: "#ffc45c", base: 0.07, step: 0.02 },
+  { id: "turbo", name: "Turbo Thrusters", kind: "speed", icon: "➜", color: "#5cffa6", base: 0.07, step: 0.018 },
+  { id: "phase-step", name: "Phase Skates", kind: "speed", icon: "»", color: "#55ffd8", base: 0.06, step: 0.02 },
+  { id: "heart", name: "Heart Core", kind: "health", icon: "♥", color: "#ff668f", base: 14, step: 5 },
+  { id: "nano-hull", name: "Nano Hull", kind: "health", icon: "⬡", color: "#ff8aa8", base: 12, step: 6 },
+  { id: "split", name: "Split Beam", kind: "multi", icon: "✦", color: "#cb78ff", base: 1, step: 0.45 },
+  { id: "prism", name: "Prism Volley", kind: "multi", icon: "✧", color: "#e38cff", base: 1, step: 0.5 },
+  { id: "phase-rounds", name: "Phase Rounds", kind: "pierce", icon: "◎", color: "#61e8ff", base: 1, step: 0.42 },
+  { id: "ghost", name: "Ghost Ammunition", kind: "pierce", icon: "◉", color: "#89f4ff", base: 1, step: 0.5 },
+  { id: "blink", name: "Blink Drive", kind: "dash", icon: "◈", color: "#8ca7ff", base: 0.08, step: 0.018 },
+  { id: "warp", name: "Warp Capacitor", kind: "dash", icon: "⬖", color: "#a593ff", base: 0.07, step: 0.02 },
+  { id: "hyper", name: "Hyper Rounds", kind: "velocity", icon: "●", color: "#ff9b55", base: 0.1, step: 0.025 },
+  { id: "comet", name: "Comet Cannon", kind: "velocity", icon: "◌", color: "#ffbd70", base: 0.09, step: 0.028 },
+  { id: "precision", name: "Precision Sight", kind: "accuracy", icon: "⌖", color: "#79f7d4", base: 0.1, step: 0.025 },
+  { id: "oracle", name: "Oracle Targeting", kind: "accuracy", icon: "⊙", color: "#9effe8", base: 0.09, step: 0.028 },
+  { id: "shield-burst", name: "Shield Burst", kind: "shield", icon: "⬢", color: "#75c8ff", base: 3, step: 1.5 },
+  { id: "repair", name: "Emergency Repair", kind: "heal", icon: "+", color: "#65ff94", base: 18, step: 9 },
 ];
+
+const upgradeDescription = (kind: UpgradeKind, power: number) => {
+  if (["damage", "rapid", "speed", "dash", "velocity", "accuracy"].includes(kind)) return `+${Math.round(power * 100)}% ${kind === "rapid" ? "firing speed" : kind === "dash" ? "dash recharge" : kind === "velocity" ? "bullet speed" : kind === "accuracy" ? "shot accuracy" : kind}`;
+  if (kind === "health") return `+${Math.round(power)} max health and heal`;
+  if (kind === "multi") return `+${Math.ceil(power)} projectiles per shot`;
+  if (kind === "pierce") return `Shots pierce +${Math.ceil(power)} enemies`;
+  if (kind === "shield") return `${power.toFixed(1)} seconds of shield power`;
+  return `Repair ${Math.round(power)} health`;
+};
+
+const UPGRADES: Upgrade[] = UPGRADE_FAMILIES.flatMap((family) =>
+  Array.from({ length: 5 }, (_, index) => {
+    const power = family.base + family.step * index;
+    return { id: `${family.id}-${index + 1}`, kind: family.kind, power, name: `${family.name} MK ${index + 1}`, description: upgradeDescription(family.kind, power), icon: family.icon, color: family.color };
+  }),
+);
 
 const EMPTY_PERMANENT: PermanentLevels = {
   damage: 0,
@@ -110,12 +138,51 @@ const PERMANENT_UPGRADES: PermanentUpgrade[] = [
   { id: "accuracy", name: "Targeting Core", description: "+12% starting accuracy", icon: "⌖", color: "#79f7d4", baseCost: 12, maxLevel: 10 },
 ];
 
-const SHIP_STYLES: ShipStyle[] = [
-  { id: "striker", name: "Rift Striker", description: "Balanced neon interceptor", icon: "◆", body: "#718cff", wing: "#405dd9", glass: "#baf8ff", engine: "#61e8ff" },
-  { id: "phantom", name: "Void Phantom", description: "Slim stealth fighter", icon: "◢", body: "#b06cff", wing: "#5a2f94", glass: "#ffd6ff", engine: "#df7dff" },
-  { id: "nova", name: "Solar Nova", description: "Bright high-energy racer", icon: "✦", body: "#ffb347", wing: "#d45137", glass: "#fff4a8", engine: "#ffe15c" },
-  { id: "bulwark", name: "Aegis Bulwark", description: "Wide armored starship", icon: "⬢", body: "#55d6a2", wing: "#187969", glass: "#d9fff5", engine: "#7dffcf" },
+const SHIP_CHASSIS = [
+  { id: "striker", name: "Striker", description: "balanced interceptor", icon: "◆" },
+  { id: "phantom", name: "Phantom", description: "slim stealth fighter", icon: "◢" },
+  { id: "nova", name: "Nova", description: "long-nose racer", icon: "✦" },
+  { id: "bulwark", name: "Bulwark", description: "wide armored ship", icon: "⬢" },
+  { id: "comet", name: "Comet", description: "sharp speed craft", icon: "➤" },
+  { id: "viper", name: "Viper", description: "fork-wing hunter", icon: "⌁" },
+  { id: "atlas", name: "Atlas", description: "heavy rift cruiser", icon: "⬡" },
+  { id: "sparrow", name: "Sparrow", description: "tiny agile scout", icon: "➹" },
+  { id: "eclipse", name: "Eclipse", description: "crescent void craft", icon: "◐" },
+  { id: "titan", name: "Titan", description: "massive battle frame", icon: "▰" },
 ];
+
+const SHIP_PALETTES = [
+  { id: "neon", name: "Neon Blue", body: "#718cff", wing: "#405dd9", glass: "#baf8ff", engine: "#61e8ff" },
+  { id: "void", name: "Void Purple", body: "#b06cff", wing: "#5a2f94", glass: "#ffd6ff", engine: "#df7dff" },
+  { id: "solar", name: "Solar Gold", body: "#ffb347", wing: "#d45137", glass: "#fff4a8", engine: "#ffe15c" },
+  { id: "aegis", name: "Aegis Green", body: "#55d6a2", wing: "#187969", glass: "#d9fff5", engine: "#7dffcf" },
+  { id: "crimson", name: "Crimson Flare", body: "#ff4f6f", wing: "#8f1938", glass: "#ffd7df", engine: "#ff879c" },
+  { id: "arctic", name: "Arctic Ice", body: "#a9ddff", wing: "#397aa8", glass: "#ffffff", engine: "#8ff8ff" },
+  { id: "toxic", name: "Toxic Lime", body: "#adff4f", wing: "#4f851c", glass: "#efffcf", engine: "#d5ff72" },
+  { id: "ember", name: "Ember Orange", body: "#ff784f", wing: "#9b351e", glass: "#ffe0b5", engine: "#ffb05c" },
+  { id: "royal", name: "Royal Pink", body: "#ff68cc", wing: "#8e2872", glass: "#ffe0f7", engine: "#ff9de0" },
+  { id: "mono", name: "Chrome Mono", body: "#cbd3df", wing: "#596273", glass: "#eaffff", engine: "#ffffff" },
+];
+
+const SHIP_STYLES: ShipStyle[] = SHIP_CHASSIS.flatMap((chassis) => SHIP_PALETTES.map((palette) => ({
+  id: `${chassis.id}-${palette.id}`,
+  shape: chassis.id,
+  name: `${palette.name} ${chassis.name}`,
+  description: chassis.description,
+  icon: chassis.icon,
+  body: palette.body,
+  wing: palette.wing,
+  glass: palette.glass,
+  engine: palette.engine,
+})));
+
+const DEFAULT_SHIP_ID = SHIP_STYLES[0].id;
+const resolveShipId = (value: unknown): ShipStyleId => {
+  if (typeof value !== "string") return DEFAULT_SHIP_ID;
+  if (SHIP_STYLES.some((ship) => ship.id === value)) return value;
+  if (SHIP_CHASSIS.some((chassis) => chassis.id === value)) return `${value}-neon`;
+  return DEFAULT_SHIP_ID;
+};
 
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 const dist = (a: Vec, b: Vec) => Math.hypot(a.x - b.x, a.y - b.y);
@@ -164,7 +231,7 @@ export default function RiftRush() {
   const mutedRef = useRef(false);
   const shardsRef = useRef(0);
   const permanentRef = useRef<PermanentLevels>({ ...EMPTY_PERMANENT });
-  const shipStyleRef = useRef<ShipStyleId>("striker");
+  const shipStyleRef = useRef<ShipStyleId>(DEFAULT_SHIP_ID);
   const importInputRef = useRef<HTMLInputElement>(null);
   const lastHudRef = useRef(0);
   const lastFrameRef = useRef(0);
@@ -175,7 +242,7 @@ export default function RiftRush() {
   const [highScore, setHighScore] = useState(0);
   const [shards, setShards] = useState(0);
   const [permanent, setPermanent] = useState<PermanentLevels>({ ...EMPTY_PERMANENT });
-  const [selectedShip, setSelectedShip] = useState<ShipStyleId>("striker");
+  const [selectedShip, setSelectedShip] = useState<ShipStyleId>(DEFAULT_SHIP_ID);
   const [saveStatus, setSaveStatus] = useState("Progress saves automatically");
   const [lastRun, setLastRun] = useState<LastRun | null>(null);
   const [choices, setChoices] = useState<Upgrade[]>([]);
@@ -316,15 +383,21 @@ export default function RiftRush() {
   const chooseUpgrade = useCallback((upgrade: Upgrade) => {
     const g = gameRef.current;
     const p = g.player;
-    if (upgrade.id === "damage") p.damage *= 1.3;
-    if (upgrade.id === "rapid") p.fireRate *= 0.78;
-    if (upgrade.id === "speed") p.speed *= 1.14;
-    if (upgrade.id === "health") { p.maxHp += 25; p.hp = Math.min(p.maxHp, p.hp + 35); }
-    if (upgrade.id === "multi") p.multishot = Math.min(6, p.multishot + 1);
-    if (upgrade.id === "pierce") p.pierce += 1;
-    if (upgrade.id === "dash") p.dashCooldown *= 0.8;
-    if (upgrade.id === "velocity") p.bulletSpeed *= 1.22;
-    if (upgrade.id === "accuracy") p.accuracy *= 0.75;
+    if (upgrade.kind === "damage") p.damage *= 1 + upgrade.power;
+    if (upgrade.kind === "rapid") p.fireRate = Math.max(0.045, p.fireRate * (1 - upgrade.power));
+    if (upgrade.kind === "speed") p.speed *= 1 + upgrade.power;
+    if (upgrade.kind === "health") {
+      const health = Math.round(upgrade.power);
+      p.maxHp += health;
+      p.hp = Math.min(p.maxHp, p.hp + health);
+    }
+    if (upgrade.kind === "multi") p.multishot = Math.min(20, p.multishot + Math.ceil(upgrade.power));
+    if (upgrade.kind === "pierce") p.pierce += Math.ceil(upgrade.power);
+    if (upgrade.kind === "dash") p.dashCooldown = Math.max(0.35, p.dashCooldown * (1 - upgrade.power));
+    if (upgrade.kind === "velocity") p.bulletSpeed *= 1 + upgrade.power;
+    if (upgrade.kind === "accuracy") p.accuracy = Math.max(0.08, p.accuracy * (1 - upgrade.power));
+    if (upgrade.kind === "shield") p.shield = Math.max(p.shield, upgrade.power);
+    if (upgrade.kind === "heal") p.hp = Math.min(p.maxHp, p.hp + upgrade.power);
     g.wave += 1;
     g.spawned = 0;
     g.waveTarget = g.wave % 5 === 0 ? 1 : 7 + g.wave * 2;
@@ -369,11 +442,11 @@ export default function RiftRush() {
     } catch {
       permanentRef.current = { ...EMPTY_PERMANENT };
     }
-    const savedShip = localStorage.getItem("rift-rush-ship") as ShipStyleId | null;
-    if (savedShip && SHIP_STYLES.some((ship) => ship.id === savedShip)) {
-      shipStyleRef.current = savedShip;
-      setSelectedShip(savedShip);
-    }
+    const savedShip = localStorage.getItem("rift-rush-ship");
+    const nextShip = resolveShipId(savedShip);
+    shipStyleRef.current = nextShip;
+    setSelectedShip(nextShip);
+    localStorage.setItem("rift-rush-ship", nextShip);
   }, []);
 
   const saveProgress = useCallback(() => {
@@ -424,7 +497,7 @@ export default function RiftRush() {
       for (const key of Object.keys(nextPermanent) as Array<keyof PermanentLevels>) {
         nextPermanent[key] = clamp(Math.floor(Number(rawPermanent[key]) || 0), 0, 10);
       }
-      const nextShip = SHIP_STYLES.some((ship) => ship.id === raw.ship) ? raw.ship as ShipStyleId : "striker";
+      const nextShip = resolveShipId(raw.ship);
       setHighScore(nextHighScore);
       shardsRef.current = nextShards;
       setShards(nextShards);
@@ -668,8 +741,8 @@ export default function RiftRush() {
       }
       ctx.shadowBlur = 22;
       const shipStyle = SHIP_STYLES.find((ship) => ship.id === shipStyleRef.current) ?? SHIP_STYLES[0];
-      const wingSpan = shipStyle.id === "bulwark" ? 27 : shipStyle.id === "phantom" ? 17 : 22;
-      const noseLength = shipStyle.id === "nova" ? 31 : shipStyle.id === "bulwark" ? 23 : 27;
+      const wingSpan = shipStyle.shape === "titan" ? 29 : ["bulwark", "atlas"].includes(shipStyle.shape) ? 27 : ["phantom", "sparrow"].includes(shipStyle.shape) ? 17 : 22;
+      const noseLength = ["nova", "comet"].includes(shipStyle.shape) ? 31 : ["bulwark", "atlas", "titan"].includes(shipStyle.shape) ? 23 : 27;
       ctx.shadowColor = p.invulnerable > 0 ? "#ffffff" : shipStyle.body;
 
       // Twin engine flames make the rear of the ship instantly readable.
@@ -868,7 +941,7 @@ export default function RiftRush() {
             burst(enemy.x, enemy.y, color, enemy.type === "boss" ? 55 : 18, enemy.type === "boss" ? 360 : 230);
             g.shake = enemy.type === "boss" ? 18 : 6;
             g.kills += 1;
-            g.combo = Math.min(9, g.comboTimer > 0 ? g.combo + 1 : 1);
+            g.combo = g.comboTimer > 0 ? g.combo + 1 : 1;
             g.comboTimer = 2.2;
             g.score += Math.round((enemy.type === "boss" ? 2500 : enemy.type === "tank" ? 260 : 100) * g.combo);
             if (enemy.type === "splitter") {
@@ -1060,7 +1133,7 @@ export default function RiftRush() {
                 <Gem size={19} /> PERMANENT UPGRADES
               </button>
               <button className="secondary-button customize-button" onClick={() => setMode("customize")}>
-                <Palette size={19} /> CUSTOMIZE SHIP
+                <Palette size={19} /> CUSTOMIZE SHIP (100)
               </button>
             </div>
             <div className="save-tools">
@@ -1124,7 +1197,7 @@ export default function RiftRush() {
             <button className="back-button" onClick={() => setMode("menu")}><ArrowLeft size={19} /> MAIN MENU</button>
             <p className="eyebrow">CHOOSE YOUR PILOT STYLE</p>
             <h2>SHIP CUSTOMIZATION</h2>
-            <p>Your chosen ship saves automatically and appears in every run.</p>
+            <p>Choose from 100 ship skins. Your favorite saves automatically and appears in every run.</p>
             <div className="ship-grid">
               {SHIP_STYLES.map((ship) => {
                 const active = selectedShip === ship.id;
@@ -1158,7 +1231,7 @@ export default function RiftRush() {
           <section className="overlay upgrade-overlay">
             <div className="cleared-badge">WAVE {hud.wave} CLEARED</div>
             <h2>CHOOSE AN UPGRADE</h2>
-            <p>Pick one boost for the rest of this run.</p>
+            <p>Discover 100 different boosts. Pick one for the rest of this run.</p>
             <div className="upgrade-grid">
               {choices.map((upgrade, index) => (
                 <button className="upgrade-card" key={upgrade.id} onClick={() => chooseUpgrade(upgrade)} style={{ "--upgrade": upgrade.color } as React.CSSProperties}>
