@@ -1259,11 +1259,17 @@ export default function RiftRush() {
               <label>MK section <input type="number" min="1" max="500" value={treePage + 1} onChange={(e) => setTreePage(clamp(Number(e.target.value) - 1, 0, 499))} /></label>
               <button onClick={() => setTreePage(Math.min(499, treePage + 1))} disabled={treePage === 499}>Next →</button>
             </div>
-            <div className="tree-root">RIFT CORE • 20 BRANCHES</div>
+            <p>Swipe sideways to explore the branches. Follow the glowing connections down.</p>
+            <div className="tree-scroll" tabIndex={0} aria-label="Scrollable upgrade branch tree">
+            <div className="tree-canopy">
+            <div className="tree-root">RIFT CORE</div>
             <div className="upgrade-tree">
-              {PERMANENT_FAMILIES.map((family, familyIndex) => <div className="tree-branch" key={family.id}>
+              {Array.from({length: 10}, (_, group) => <div className="tree-limb" key={group}>
+                <div className="tree-junction">{PERMANENT_FAMILIES[group * 2].stat.toUpperCase()}</div>
+                <div className="tree-fork">
+              {PERMANENT_FAMILIES.slice(group * 2, group * 2 + 2).map((family, offset) => <div className="tree-branch" key={family.id}>
                 <h3 style={{color: family.color}}>{family.icon} {family.name}</h3>
-                {PERMANENT_UPGRADES.slice(familyIndex * 2500 + treePage * 5, familyIndex * 2500 + treePage * 5 + 5).map((upgrade) => {
+                {PERMANENT_UPGRADES.slice((group * 2 + offset) * 2500 + treePage * 5, (group * 2 + offset) * 2500 + treePage * 5 + 5).map((upgrade) => {
                   const owned = permanentPurchases[upgrade.id] === true;
                   const previous = upgrade.id.replace(/-\d+$/, `-${upgrade.tier - 1}`);
                   const needsPrevious = upgrade.tier > 1 && !permanentPurchases[previous];
@@ -1274,7 +1280,9 @@ export default function RiftRush() {
                   </button>;
                 })}
               </div>)}
+                </div></div>)}
             </div>
+            </div></div>
           </section>
         )}
 
