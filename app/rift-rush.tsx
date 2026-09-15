@@ -598,7 +598,25 @@ export default function RiftRush() {
     setRebirthConfirm(false);
     localStorage.setItem("rift-rush-rebirths", String(rebirthRef.current));
     localStorage.setItem("rift-rush-shards", "0");
-    setSaveStatus("Rebirth complete! Upgrades and skins kept.");
+    permanentRef.current = { ...EMPTY_PERMANENT };
+    permanentPurchasesRef.current = {};
+    shipStyleRef.current = DEFAULT_SHIP_ID;
+    setPermanent({ ...EMPTY_PERMANENT });
+    setPermanentPurchases({});
+    setSelectedShip(DEFAULT_SHIP_ID);
+    setHighScore(0);
+    setLastRun(null);
+    setTreePage(0);
+    const g = gameRef.current;
+    gameRef.current = newGame(g.width, g.height, EMPTY_PERMANENT, rebirthRef.current);
+    keysRef.current = {};
+    pointerRef.current.firing = false;
+    localStorage.setItem("rift-rush-permanent", JSON.stringify(EMPTY_PERMANENT));
+    localStorage.setItem("rift-rush-permanent-purchases", "{}");
+    localStorage.setItem("rift-rush-ship", DEFAULT_SHIP_ID);
+    localStorage.setItem("rift-rush-high-score", "0");
+    setMode("menu");
+    setSaveStatus("Rebirth complete! Fresh start with your rebirth bonuses.");
     sfx("pickup");
   };
 
@@ -1269,9 +1287,9 @@ export default function RiftRush() {
             <h2>RIFT UPGRADE TREE</h2>
             <p>{Object.keys(permanentPurchases).length.toLocaleString()} / 50,000 owned • Rebirth {rebirths} • ×{(1 + rebirths * 0.5).toFixed(1)} strength • ×{(1 + rebirths * 0.25).toFixed(2)} shards</p>
             <div className="rebirth-panel">
-              <p>Rebirth resets all shards. Keep upgrades, skins and best score. Each rebirth adds +0.5× damage and health, plus +25% shard earnings. The next rebirth costs 5× more.</p>
+              <p>Rebirth resets shards, purchased upgrades, scores and your selected ship. Only your rebirth count and bonuses carry over. Each rebirth adds +0.5× damage and health, plus +25% shard earnings. The next rebirth costs 5× more.</p>
               <button className="secondary-button" disabled={shards < rebirthCost || rebirths >= 2500} onClick={() => setRebirthConfirm(true)}>REBIRTH • Need {rebirthCost.toLocaleString()} shards</button>
-              {rebirthConfirm && <div role="alert"><p>Reset your {shards.toLocaleString()} shards for rebirth {rebirths + 1}?</p><button className="secondary-button" onClick={doRebirth}>CONFIRM REBIRTH</button><button className="back-button" onClick={() => setRebirthConfirm(false)}>CANCEL</button></div>}
+              {rebirthConfirm && <div role="alert"><p>Reset all shards, purchased upgrades, scores and ship selection for rebirth {rebirths + 1}? This cannot be undone.</p><button className="secondary-button" onClick={doRebirth}>CONFIRM REBIRTH</button><button className="back-button" onClick={() => setRebirthConfirm(false)}>CANCEL</button></div>}
             </div>
             <p>MK1: rebirth 0. MK2: rebirth 2. MK3: rebirth 3, and so on. Buy the previous node first.</p>
             <div className="tree-navigation">
