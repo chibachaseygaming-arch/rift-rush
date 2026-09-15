@@ -230,15 +230,16 @@ const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(ma
 const dist = (a: Vec, b: Vec) => Math.hypot(a.x - b.x, a.y - b.y);
 const random = (min: number, max: number) => min + Math.random() * (max - min);
 const chooseThree = () => [...UPGRADES].sort(() => Math.random() - 0.5).slice(0, 3);
-function newGame(width: number, height: number, permanent: PermanentLevels = EMPTY_PERMANENT): GameState {
-  const maxHp = 100 + permanent.health * 12;
+function newGame(width: number, height: number, permanent: PermanentLevels = EMPTY_PERMANENT, rebirths = 0): GameState {
+  const strength = 1 + rebirths * 0.5;
+  const maxHp = Math.round((100 + permanent.health * 12) * strength);
   return {
     width,
     height,
     time: 0,
     player: {
       x: width / 2, y: height / 2, r: 15, hp: maxHp, maxHp, speed: 260 * (1 + permanent.speed * 0.06),
-      angle: -Math.PI / 2, fireRate: 0.19 * Math.max(0.1, Math.pow(0.94, permanent.fireRate)), fireTimer: 0, damage: 24 * (1 + permanent.damage * 0.1),
+      angle: -Math.PI / 2, fireRate: 0.19 * Math.max(0.1, Math.pow(0.94, permanent.fireRate)), fireTimer: 0, damage: 24 * (1 + permanent.damage * 0.1) * strength,
       bulletSpeed: 720 * (1 + permanent.bulletSpeed * 0.08), multishot: Math.min(20, 1 + permanent.multishot),
       pierce: Math.min(30, permanent.pierce), accuracy: Math.max(0.03, Math.pow(0.88, permanent.accuracy)), dashTimer: 0,
       dashCooldown: 1.8 * Math.max(0.15, Math.pow(0.94, permanent.dash)), dashTime: 0, invulnerable: 0,
@@ -419,7 +420,7 @@ export default function RiftRush() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    gameRef.current = newGame(rect.width, rect.height, permanentRef.current);
+    gameRef.current = newGame(rect.width, rect.height, permanentRef.current, rebirthRef.current);
     const player = gameRef.current.player;
     pointerRef.current = { x: rect.width * 0.7, y: rect.height * 0.5, firing: false };
     setHud({ hp: player.hp, maxHp: player.maxHp, score: 0, wave: 1, combo: 1, dash: 1, shield: 0 });
@@ -585,9 +586,9 @@ export default function RiftRush() {
     }
   }, [sfx]);
 
-  const rebirthCost = 100 + rebirths * 100;
+  const rebirthCost = 100 * Math.pow(5, rebirths);
   const doRebirth = () => {
-    const cost = 100 + rebirthRef.current * 100;
+    const cost = 100 * Math.pow(5, rebirthRef.current);
     if (shardsRef.current < cost || rebirthRef.current >= 2500) return;
     rebirthRef.current += 1;
     shardsRef.current = 0;
@@ -1246,9 +1247,9 @@ export default function RiftRush() {
             <div className="shard-bank"><Gem size={20} fill="currentColor" /><span>RIFT SHARDS</span><strong>{shards.toLocaleString()}</strong></div>
             <p className="eyebrow">YOUR POWER STAYS FOREVER</p>
             <h2>RIFT UPGRADE TREE</h2>
-            <p>{Object.keys(permanentPurchases).length.toLocaleString()} / 50,000 owned • Rebirth {rebirths} • ×{(1 + rebirths * 0.25).toFixed(2)} shards</p>
+            <p>{Object.keys(permanentPurchases).length.toLocaleString()} / 50,000 owned • Rebirth {rebirths} • ×{(1 + rebirths * 0.5).toFixed(1)} strength • ×{(1 + rebirths * 0.25).toFixed(2)} shards</p>
             <div className="rebirth-panel">
-              <p>Rebirth resets all shards. Keep upgrades, skins and best score. Gain +25% shard earnings.</p>
+              <p>Rebirth resets all shards. Keep upgrades, skins and best score. Each rebirth adds +0.5× damage and health, plus +25% shard earnings. The next rebirth costs 5× more.</p>
               <button className="secondary-button" disabled={shards < rebirthCost || rebirths >= 2500} onClick={() => setRebirthConfirm(true)}>REBIRTH • Need {rebirthCost.toLocaleString()} shards</button>
               {rebirthConfirm && <div role="alert"><p>Reset your {shards.toLocaleString()} shards for rebirth {rebirths + 1}?</p><button className="secondary-button" onClick={doRebirth}>CONFIRM REBIRTH</button><button className="back-button" onClick={() => setRebirthConfirm(false)}>CANCEL</button></div>}
             </div>
