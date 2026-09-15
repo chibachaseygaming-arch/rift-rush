@@ -274,10 +274,7 @@ export default function RiftRush() {
   const shardsRef = useRef(0);
   const rebirthRef = useRef(0);
   const [rebirths, setRebirths] = useState(0);
-  const [shopCategory, setShopCategory] = useState("All");
-  const [shopSearch, setShopSearch] = useState("");
-  const pulseReadyRef = useRef(0);
-  const [pulseSeconds, setPulseSeconds] = useState(0);
+  const [treePage, setTreePage] = useState(0);
   const [shipSearch, setShipSearch] = useState("");
   const [rebirthConfirm, setRebirthConfirm] = useState(false);
   const permanentRef = useRef<PermanentLevels>({ ...EMPTY_PERMANENT });
@@ -420,27 +417,10 @@ export default function RiftRush() {
     sfx("dash");
   }, [burst, sfx]);
 
-  const pulse = useCallback(() => {
-    if (modeRef.current !== "playing") return;
-    const g = gameRef.current;
-    if (g.time < pulseReadyRef.current) return;
-    pulseReadyRef.current = g.time + 12;
-    g.bullets = g.bullets.filter(b => !b.enemy || dist(b, g.player) > 240);
-    for (let i = 0; i < 24; i++) {
-      const angle = i / 24 * Math.PI * 2;
-      g.bullets.push({x:g.player.x,y:g.player.y,vx:Math.cos(angle)*500,vy:Math.sin(angle)*500,r:7,life:0.6,damage:g.player.damage*2,pierce:3,enemy:false,color:"#ffd16a"});
-    }
-    g.player.invulnerable = Math.max(g.player.invulnerable, 0.5);
-    burst(g.player.x, g.player.y, "#ffd16a", 30, 350);
-    sfx("dash");
-  }, [burst,sfx]);
-
   const startGame = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    pulseReadyRef.current = 0;
-    setPulseSeconds(0);
     gameRef.current = newGame(rect.width, rect.height, permanentRef.current, rebirthRef.current);
     const player = gameRef.current.player;
     pointerRef.current = { x: rect.width * 0.7, y: rect.height * 0.5, firing: false };
@@ -651,7 +631,6 @@ export default function RiftRush() {
       keysRef.current[event.key.toLowerCase()] = true;
       if ([" ", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(event.key.toLowerCase())) event.preventDefault();
       if ((event.key === "Shift" || event.key.toLowerCase() === "e") && !event.repeat) dash();
-      if (event.key.toLowerCase() === "q" && !event.repeat) pulse();
       if (event.key.toLowerCase() === "p" || event.key === "Escape") {
         if (modeRef.current === "playing") setMode("paused");
         else if (modeRef.current === "paused") setMode("playing");
@@ -668,7 +647,7 @@ export default function RiftRush() {
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", releaseControls);
     };
-  }, [dash, pulse, setMode, startGame]);
+  }, [dash, setMode, startGame]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1155,7 +1134,6 @@ export default function RiftRush() {
           combo: g.combo, dash: 1 - g.player.dashTimer / g.player.dashCooldown,
           shield: g.player.shield,
         });
-        setPulseSeconds(Math.ceil(Math.max(0, pulseReadyRef.current - g.time)));
         lastHudRef.current = time;
       }
       rafRef.current = requestAnimationFrame(frame);
@@ -1224,7 +1202,6 @@ export default function RiftRush() {
           </div>
         )}
 
-        {mode === "playing" && <button className="pulse-action" onClick={pulse} disabled={pulseSeconds > 0}>{pulseSeconds > 0 ? `PULSE • ${pulseSeconds}s` : "PULSE • Q"}</button>}
         {mode === "playing" && (
           <div className="mobile-controls" aria-label="Touch controls">
             <div className="stick move-stick" onPointerDown={stickStart("move")} onPointerMove={stickMove("move")} onPointerUp={stickEnd("move")} onPointerCancel={stickEnd("move")}>
@@ -1242,7 +1219,7 @@ export default function RiftRush() {
         {mode === "menu" && (
           <section className="overlay menu-overlay">
             <div className="brand-mark"><span>R</span></div>
-            <p className="eyebrow">RIFT RUSH / OVERDRIVE</p>
+            <p className="eyebrow">ORBITAL COMMAND • SURVIVAL</p>
             <h1>RIFT <span>RUSH</span></h1>
             {lastRun ? (
               <div className="last-run-card">
@@ -1251,7 +1228,7 @@ export default function RiftRush() {
                 <small>Wave {lastRun.wave} • <b>+{lastRun.earned} Rift Shards</b></small>
               </div>
             ) : (
-              <p className="tagline">Launch. Unleash your pulse. Build your next run.</p>
+              <p className="tagline">Blast the swarm. Build wild upgrades. Survive the rift.</p>
             )}
             <div className="command-stats"><span>REBIRTH<strong>{rebirths}</strong></span><span>POWER<strong>×{(1 + rebirths * 0.5).toFixed(1)}</strong></span><span>UPGRADES<strong>{Object.keys(permanentPurchases).length.toLocaleString()}</strong></span></div>
             <div className="shard-balance"><Gem size={17} fill="currentColor" /> {shards.toLocaleString()} RIFT SHARDS</div>
@@ -1261,10 +1238,10 @@ export default function RiftRush() {
                 {lastRun ? "RESTART" : "PLAY NOW"}
               </button>
               <button className="secondary-button upgrades-button" onClick={() => setMode("permanent")}>
-                <Gem size={19} /> UPGRADE SHOP
+                <Gem size={19} /> UPGRADE TREE • REBIRTH
               </button>
               <button className="secondary-button customize-button" onClick={() => setMode("customize")}>
-                <Palette size={19} /> SHIP HANGAR
+                <Palette size={19} /> CUSTOMIZE SHIP (100)
               </button>
             </div>
             <div className="save-tools">
@@ -1277,7 +1254,7 @@ export default function RiftRush() {
             <div className="controls-card">
               <div><Move size={19} /><span><b>Move</b> WASD / arrows</span></div>
               <div><Crosshair size={19} /><span><b>Shoot</b> aim + hold click</span></div>
-              <div><Zap size={19} /><span><b>Dash</b> Shift / E • Pulse: Q</span></div>
+              <div><Zap size={19} /><span><b>Dash</b> Shift or E</span></div>
             </div>
             <p className="touch-note">Phone controls appear when the game starts</p>
             {highScore > 0 && <p className="best-score">BEST SCORE&nbsp; {highScore.toLocaleString()}</p>}
@@ -1289,36 +1266,43 @@ export default function RiftRush() {
             <button className="back-button" onClick={() => setMode("menu")}><ArrowLeft size={19} /> MAIN MENU</button>
             <div className="shard-bank"><Gem size={20} fill="currentColor" /><span>RIFT SHARDS</span><strong>{shards.toLocaleString()}</strong></div>
             <p className="eyebrow">YOUR POWER STAYS FOREVER</p>
-            <h2>PERMANENT ARMORY</h2>
+            <h2>RIFT UPGRADE TREE</h2>
             <p>{Object.keys(permanentPurchases).length.toLocaleString()} / 50,000 owned • Rebirth {rebirths} • ×{(1 + rebirths * 0.5).toFixed(1)} strength • ×{(1 + rebirths * 0.25).toFixed(2)} shards</p>
             <div className="rebirth-panel">
               <p>Rebirth resets all shards. Keep upgrades, skins and best score. Each rebirth adds +0.5× damage and health, plus +25% shard earnings. The next rebirth costs 5× more.</p>
               <button className="secondary-button" disabled={shards < rebirthCost || rebirths >= 2500} onClick={() => setRebirthConfirm(true)}>REBIRTH • Need {rebirthCost.toLocaleString()} shards</button>
               {rebirthConfirm && <div role="alert"><p>Reset your {shards.toLocaleString()} shards for rebirth {rebirths + 1}?</p><button className="secondary-button" onClick={doRebirth}>CONFIRM REBIRTH</button><button className="back-button" onClick={() => setRebirthConfirm(false)}>CANCEL</button></div>}
             </div>
-            <div className="shop-controls">
-              <input aria-label="Search permanent upgrades" placeholder="Search upgrades…" value={shopSearch} onChange={e => setShopSearch(e.target.value)} />
-              <div className="shop-tabs" aria-label="Upgrade categories">{["All", "Weapons", "Defense", "Movement"].map(category => <button key={category} aria-pressed={shopCategory === category} className={shopCategory === category ? "active" : ""} onClick={() => setShopCategory(category)}>{category}</button>)}</div>
+            <p>MK1: rebirth 0. MK2: rebirth 2. MK3: rebirth 3, and so on. Buy the previous node first.</p>
+            <div className="tree-navigation">
+              <button onClick={() => setTreePage(Math.max(0, treePage - 1))} disabled={treePage === 0}>← Previous</button>
+              <label>MK section <input type="number" min="1" max="500" value={treePage + 1} onChange={(e) => setTreePage(clamp(Number(e.target.value) - 1, 0, 499))} /></label>
+              <button onClick={() => setTreePage(Math.min(499, treePage + 1))} disabled={treePage === 499}>Next →</button>
             </div>
-            <p>Each card shows your next upgrade. MK1 is available immediately; later marks need the matching rebirth.</p>
-            <div className="perma-shop">
-              {PERMANENT_FAMILIES.map((family, index) => {
-                const category = ["health", "shield"].includes(family.stat) ? "Defense" : ["speed", "dash"].includes(family.stat) ? "Movement" : "Weapons";
-                if (shopCategory !== "All" && category !== shopCategory || !family.name.toLowerCase().includes(shopSearch.toLowerCase())) return null;
-                let tier = 1;
-                while (tier <= 2500 && permanentPurchases[`${family.id}-${tier}`]) tier++;
-                const complete = tier > 2500;
-                const upgrade = PERMANENT_UPGRADES[index * 2500 + Math.min(tier, 2500) - 1];
-                const locked = tier > 1 && rebirths < tier;
-                return <article className="shop-item" key={family.id} style={{"--upgrade":family.color} as React.CSSProperties}>
-                  <div className="shop-item-top"><span>{family.icon}</span><small>{category}</small><b>MK {Math.min(tier,2500)}</b></div>
-                  <h3>{family.name}</h3><p>{family.description}</p>
-                  <small>{Math.min(tier - 1,2500).toLocaleString()} / 2,500 owned</small>
-                  <progress value={tier - 1} max={2500} />
-                  <button disabled={complete || locked || shards < upgrade.cost} onClick={() => buyPermanentUpgrade(upgrade)}>{complete ? "COMPLETE" : locked ? `UNLOCK AT REBIRTH ${tier}` : shards < upgrade.cost ? `NEED ${upgrade.cost.toLocaleString()} SHARDS` : `BUY • ${upgrade.cost.toLocaleString()} SHARDS`}</button>
-                </article>;
-              })}
+            <p>Swipe sideways to explore the branches. Follow the glowing connections down.</p>
+            <div className="tree-scroll" tabIndex={0} aria-label="Scrollable upgrade branch tree">
+            <div className="tree-canopy">
+            <div className="tree-root">RIFT CORE</div>
+            <div className="upgrade-tree">
+              {Array.from({length: 10}, (_, group) => <div className="tree-limb" key={group}>
+                <div className="tree-junction">{PERMANENT_FAMILIES[group * 2].stat.toUpperCase()}</div>
+                <div className="tree-fork">
+              {PERMANENT_FAMILIES.slice(group * 2, group * 2 + 2).map((family, offset) => <div className="tree-branch" key={family.id}>
+                <h3 style={{color: family.color}}>{family.icon} {family.name}</h3>
+                {PERMANENT_UPGRADES.slice((group * 2 + offset) * 2500 + treePage * 5, (group * 2 + offset) * 2500 + treePage * 5 + 5).map((upgrade) => {
+                  const owned = permanentPurchases[upgrade.id] === true;
+                  const previous = upgrade.id.replace(/-\d+$/, `-${upgrade.tier - 1}`);
+                  const needsPrevious = upgrade.tier > 1 && !permanentPurchases[previous];
+                  const needsRebirth = upgrade.tier > 1 && rebirths < upgrade.tier;
+                  return <button key={upgrade.id} className={`tree-node ${owned ? "owned" : ""}`} disabled={owned || needsPrevious || needsRebirth || shards < upgrade.cost} onClick={() => buyPermanentUpgrade(upgrade)} style={{"--upgrade": upgrade.color} as React.CSSProperties}>
+                    <strong>{upgrade.name}</strong><small>{upgrade.description}</small>
+                    <span>{owned ? "✓ OWNED" : needsRebirth ? `Rebirth ${upgrade.tier} required` : needsPrevious ? `Buy MK ${upgrade.tier - 1} first` : `${upgrade.cost.toLocaleString()} shards`}</span>
+                  </button>;
+                })}
+              </div>)}
+                </div></div>)}
             </div>
+            </div></div>
           </section>
         )}
 
