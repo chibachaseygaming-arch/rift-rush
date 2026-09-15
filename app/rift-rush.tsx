@@ -275,6 +275,7 @@ export default function RiftRush() {
   const rebirthRef = useRef(0);
   const [rebirths, setRebirths] = useState(0);
   const [treePage, setTreePage] = useState(0);
+  const [shipSearch, setShipSearch] = useState("");
   const [rebirthConfirm, setRebirthConfirm] = useState(false);
   const permanentRef = useRef<PermanentLevels>({ ...EMPTY_PERMANENT });
   const permanentPurchasesRef = useRef<Record<string, boolean>>({});
@@ -638,10 +639,13 @@ export default function RiftRush() {
     };
     const onKeyUp = (event: KeyboardEvent) => { keysRef.current[event.key.toLowerCase()] = false; };
     window.addEventListener("keydown", onKeyDown, { passive: false });
+    const releaseControls = () => { keysRef.current = {}; pointerRef.current.firing = false; moveStickRef.current = {x: 0, y: 0}; aimStickRef.current = {x: 0, y: 0}; if (modeRef.current === "playing") setMode("paused"); };
+    window.addEventListener("blur", releaseControls);
     window.addEventListener("keyup", onKeyUp);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", releaseControls);
     };
   }, [dash, setMode, startGame]);
 
@@ -715,6 +719,20 @@ export default function RiftRush() {
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, g.width, g.height);
 
+      // Rotating orbital arena rings, kept behind gameplay.
+      ctx.save();
+      ctx.translate(g.width / 2, g.height / 2);
+      ctx.rotate(g.time * 0.025);
+      for (let ring = 0; ring < 3; ring++) {
+        const radius = Math.min(g.width, g.height) * (0.22 + ring * 0.15);
+        ctx.strokeStyle = ["#50d5e922", "#8b70ff22", "#50d5e914"][ring];
+        ctx.lineWidth = ring === 1 ? 12 : 2;
+        ctx.setLineDash(ring === 1 ? [2, 22] : [90, 35]);
+        ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.restore();
+      ctx.strokeStyle = "#60e8ff30"; ctx.lineWidth = 2;
+      ctx.strokeRect(12, 12, g.width - 24, g.height - 24);
       ctx.save();
       if (g.shake > 0) ctx.translate(random(-g.shake, g.shake), random(-g.shake, g.shake));
       for (const star of g.stars) {
@@ -1088,6 +1106,7 @@ export default function RiftRush() {
         } else if (drop.life <= 0) g.drops.splice(i, 1);
       }
 
+      if (g.particles.length > 600) g.particles.splice(0, g.particles.length - 600);
       for (let i = g.particles.length - 1; i >= 0; i -= 1) {
         const particle = g.particles[i];
         particle.x += particle.vx * dt;
@@ -1173,7 +1192,7 @@ export default function RiftRush() {
             <div className="score-box">
               <span>Score</span>
               <strong>{hud.score.toLocaleString()}</strong>
-              {hud.combo > 1 && <em>×{hud.combo} COMBO</em>}
+              {hud.combo > 1 && <><em>×{hud.combo} COMBO</em><div className="combo-track"><i style={{width: `${gameRef.current.comboTimer / 2.2 * 100}%`}} /></div></>}
             </div>
             <div className="hud-actions">
               {hud.shield > 0 && <div className="power-chip shield-chip"><Shield size={15} /> Shield</div>}
@@ -1200,7 +1219,7 @@ export default function RiftRush() {
         {mode === "menu" && (
           <section className="overlay menu-overlay">
             <div className="brand-mark"><span>R</span></div>
-            <p className="eyebrow">NEON SURVIVAL ARENA</p>
+            <p className="eyebrow">ORBITAL COMMAND • SURVIVAL</p>
             <h1>RIFT <span>RUSH</span></h1>
             {lastRun ? (
               <div className="last-run-card">
@@ -1211,6 +1230,7 @@ export default function RiftRush() {
             ) : (
               <p className="tagline">Blast the swarm. Build wild upgrades. Survive the rift.</p>
             )}
+            <div className="command-stats"><span>REBIRTH<strong>{rebirths}</strong></span><span>POWER<strong>×{(1 + rebirths * 0.5).toFixed(1)}</strong></span><span>UPGRADES<strong>{Object.keys(permanentPurchases).length.toLocaleString()}</strong></span></div>
             <div className="shard-balance"><Gem size={17} fill="currentColor" /> {shards.toLocaleString()} RIFT SHARDS</div>
             <div className="menu-actions">
               <button className="primary-button" onClick={startGame}>
@@ -1292,8 +1312,9 @@ export default function RiftRush() {
             <p className="eyebrow">CHOOSE YOUR PILOT STYLE</p>
             <h2>SHIP CUSTOMIZATION</h2>
             <p>Choose from 100 ship skins. Your favorite saves automatically and appears in every run.</p>
+            <input className="hangar-search" aria-label="Search ship skins" placeholder="Find a ship or color…" value={shipSearch} onChange={(event) => setShipSearch(event.target.value)} />
             <div className="ship-grid">
-              {SHIP_STYLES.map((ship) => {
+              {SHIP_STYLES.filter((ship) => ship.name.toLowerCase().includes(shipSearch.toLowerCase())).map((ship) => {
                 const active = selectedShip === ship.id;
                 return (
                   <button
@@ -1323,6 +1344,7 @@ export default function RiftRush() {
 
         {mode === "upgrade" && (
           <section className="overlay upgrade-overlay">
+            <p className="eyebrow">SYSTEM UPGRADE READY</p>
             <div className="cleared-badge">WAVE {hud.wave} CLEARED</div>
             <h2>CHOOSE AN UPGRADE</h2>
             <p>Discover 100 different boosts. Pick one for the rest of this run.</p>
