@@ -162,7 +162,7 @@ const PERMANENT_FAMILIES: Array<Omit<PermanentUpgrade, "id" | "tier" | "name" | 
 ];
 
 const PERMANENT_UPGRADES: PermanentUpgrade[] = PERMANENT_FAMILIES.flatMap((family) =>
-  Array.from({ length: 5 }, (_, index) => ({
+  Array.from({ length: 2500 }, (_, index) => ({
     id: `${family.id}-${index + 1}`,
     stat: family.stat,
     tier: index + 1,
@@ -238,10 +238,10 @@ function newGame(width: number, height: number, permanent: PermanentLevels = EMP
     time: 0,
     player: {
       x: width / 2, y: height / 2, r: 15, hp: maxHp, maxHp, speed: 260 * (1 + permanent.speed * 0.06),
-      angle: -Math.PI / 2, fireRate: 0.19 * Math.pow(0.94, permanent.fireRate), fireTimer: 0, damage: 24 * (1 + permanent.damage * 0.1),
-      bulletSpeed: 720 * (1 + permanent.bulletSpeed * 0.08), multishot: 1 + permanent.multishot,
-      pierce: permanent.pierce, accuracy: Math.pow(0.88, permanent.accuracy), dashTimer: 0,
-      dashCooldown: 1.8 * Math.pow(0.94, permanent.dash), dashTime: 0, invulnerable: 0,
+      angle: -Math.PI / 2, fireRate: 0.19 * Math.max(0.1, Math.pow(0.94, permanent.fireRate)), fireTimer: 0, damage: 24 * (1 + permanent.damage * 0.1),
+      bulletSpeed: 720 * (1 + permanent.bulletSpeed * 0.08), multishot: Math.min(20, 1 + permanent.multishot),
+      pierce: Math.min(30, permanent.pierce), accuracy: Math.max(0.03, Math.pow(0.88, permanent.accuracy)), dashTimer: 0,
+      dashCooldown: 1.8 * Math.max(0.15, Math.pow(0.94, permanent.dash)), dashTime: 0, invulnerable: 0,
       shield: permanent.shield, rapid: 0,
     },
     bullets: [],
@@ -271,6 +271,10 @@ export default function RiftRush() {
   const audioRef = useRef<AudioContext | null>(null);
   const mutedRef = useRef(false);
   const shardsRef = useRef(0);
+  const rebirthRef = useRef(0);
+  const [rebirths, setRebirths] = useState(0);
+  const [treePage, setTreePage] = useState(0);
+  const [rebirthConfirm, setRebirthConfirm] = useState(false);
   const permanentRef = useRef<PermanentLevels>({ ...EMPTY_PERMANENT });
   const permanentPurchasesRef = useRef<Record<string, boolean>>({});
   const shipStyleRef = useRef<ShipStyleId>(DEFAULT_SHIP_ID);
@@ -458,7 +462,7 @@ export default function RiftRush() {
       localStorage.setItem("rift-rush-high-score", String(g.score));
       setHighScore(g.score);
     }
-    const earned = Math.max(2, Math.floor(g.score / 650) + g.wave);
+    const earned = Math.floor(Math.max(2, Math.floor(g.score / 650) + g.wave) * (1 + rebirthRef.current * 0.25));
     const nextShards = shardsRef.current + earned;
     shardsRef.current = nextShards;
     setShards(nextShards);
@@ -469,6 +473,8 @@ export default function RiftRush() {
   }, [setMode, sfx]);
 
   useEffect(() => {
+    rebirthRef.current = clamp(Math.floor(Number(localStorage.getItem("rift-rush-rebirths")) || 0), 0, 2500);
+    setRebirths(rebirthRef.current);
     setHighScore(Number(localStorage.getItem("rift-rush-high-score") || 0));
     const savedShards = Math.max(0, Number(localStorage.getItem("rift-rush-shards") || 0));
     shardsRef.current = Number.isFinite(savedShards) ? savedShards : 0;
@@ -478,7 +484,7 @@ export default function RiftRush() {
       const loaded = { ...EMPTY_PERMANENT };
       for (const key of Object.keys(loaded) as Array<keyof PermanentLevels>) {
         const value = Number(savedPermanent[key] ?? 0);
-        loaded[key] = clamp(Number.isFinite(value) ? Math.floor(value) : 0, 0, 20);
+        loaded[key] = clamp(Number.isFinite(value) ? Math.floor(value) : 0, 0, 10000);
       }
       permanentRef.current = loaded;
       setPermanent(loaded);
@@ -520,6 +526,7 @@ export default function RiftRush() {
     const data = {
       format: "rift-rush-save",
       version: 1,
+      rebirths: rebirthRef.current,
       highScore,
       shards: shardsRef.current,
       permanent: permanentRef.current,
@@ -550,6 +557,10 @@ export default function RiftRush() {
         nextPermanent[key] = clamp(Math.floor(Number(rawPermanent[key]) || 0), 0, 20);
       }
       const nextPurchases = resolvePermanentPurchases(raw.permanentPurchases);
+      const nextRebirths = clamp(Math.floor(Number(raw.rebirths)) || 0, 0, 2500);
+      rebirthRef.current = nextRebirths;
+      setRebirths(nextRebirths);
+      localStorage.setItem("rift-rush-rebirths", String(nextRebirths));
       const nextShip = resolveShipId(raw.ship);
       setHighScore(nextHighScore);
       shardsRef.current = nextShards;
@@ -574,8 +585,26 @@ export default function RiftRush() {
     }
   }, [sfx]);
 
+  const rebirthCost = 100 + rebirths * 100;
+  const doRebirth = () => {
+    const cost = 100 + rebirthRef.current * 100;
+    if (shardsRef.current < cost || rebirthRef.current >= 2500) return;
+    rebirthRef.current += 1;
+    shardsRef.current = 0;
+    setRebirths(rebirthRef.current);
+    setShards(0);
+    setRebirthConfirm(false);
+    localStorage.setItem("rift-rush-rebirths", String(rebirthRef.current));
+    localStorage.setItem("rift-rush-shards", "0");
+    setSaveStatus("Rebirth complete! Upgrades and skins kept.");
+    sfx("pickup");
+  };
+
   const buyPermanentUpgrade = useCallback((upgrade: PermanentUpgrade) => {
     if (permanentPurchasesRef.current[upgrade.id]) return;
+    if (upgrade.tier > 1 && rebirthRef.current < upgrade.tier) return;
+    const previous = upgrade.id.replace(/-\d+$/, `-${upgrade.tier - 1}`);
+    if (upgrade.tier > 1 && !permanentPurchasesRef.current[previous]) return;
     if (shardsRef.current < upgrade.cost) return;
     const nextShards = shardsRef.current - upgrade.cost;
     const nextPermanent = {
@@ -1188,7 +1217,7 @@ export default function RiftRush() {
                 {lastRun ? "RESTART" : "PLAY NOW"}
               </button>
               <button className="secondary-button upgrades-button" onClick={() => setMode("permanent")}>
-                <Gem size={19} /> PERMANENT UPGRADES (100)
+                <Gem size={19} /> UPGRADE TREE • REBIRTH
               </button>
               <button className="secondary-button customize-button" onClick={() => setMode("customize")}>
                 <Palette size={19} /> CUSTOMIZE SHIP (100)
@@ -1216,34 +1245,34 @@ export default function RiftRush() {
             <button className="back-button" onClick={() => setMode("menu")}><ArrowLeft size={19} /> MAIN MENU</button>
             <div className="shard-bank"><Gem size={20} fill="currentColor" /><span>RIFT SHARDS</span><strong>{shards.toLocaleString()}</strong></div>
             <p className="eyebrow">YOUR POWER STAYS FOREVER</p>
-            <h2>100 PERMANENT UPGRADES</h2>
-            <p>{Object.keys(permanentPurchases).length} / 100 collected • Every upgrade powers up all future runs.</p>
-            <div className="permanent-grid">
-              {PERMANENT_UPGRADES.map((upgrade) => {
-                const maxed = permanentPurchases[upgrade.id] === true;
-                const affordable = shards >= upgrade.cost;
-                return (
-                  <button
-                    className="permanent-card"
-                    key={upgrade.id}
-                    onClick={() => buyPermanentUpgrade(upgrade)}
-                    disabled={maxed || !affordable}
-                    style={{ "--upgrade": upgrade.color } as React.CSSProperties}
-                  >
-                    <span className="permanent-icon">{upgrade.icon}</span>
-                    <span className="permanent-copy">
-                      <strong>{upgrade.name}</strong>
-                      <small>{upgrade.description}</small>
-                      <span className="level-pips" aria-label={maxed ? "Collected" : `Tier ${upgrade.tier}`}>
-                        {Array.from({ length: 5 }, (_, index) => <i className={index < upgrade.tier ? "filled" : ""} key={index} />)}
-                      </span>
-                    </span>
-                    <span className={`buy-cost ${maxed ? "maxed" : ""}`}>
-                      {maxed ? "OWNED" : <><Gem size={14} fill="currentColor" /> {upgrade.cost}</>}
-                    </span>
-                  </button>
-                );
-              })}
+            <h2>RIFT UPGRADE TREE</h2>
+            <p>{Object.keys(permanentPurchases).length.toLocaleString()} / 50,000 owned • Rebirth {rebirths} • ×{(1 + rebirths * 0.25).toFixed(2)} shards</p>
+            <div className="rebirth-panel">
+              <p>Rebirth resets all shards. Keep upgrades, skins and best score. Gain +25% shard earnings.</p>
+              <button className="secondary-button" disabled={shards < rebirthCost || rebirths >= 2500} onClick={() => setRebirthConfirm(true)}>REBIRTH • Need {rebirthCost.toLocaleString()} shards</button>
+              {rebirthConfirm && <div role="alert"><p>Reset your {shards.toLocaleString()} shards for rebirth {rebirths + 1}?</p><button className="secondary-button" onClick={doRebirth}>CONFIRM REBIRTH</button><button className="back-button" onClick={() => setRebirthConfirm(false)}>CANCEL</button></div>}
+            </div>
+            <p>MK1: rebirth 0. MK2: rebirth 2. MK3: rebirth 3, and so on. Buy the previous node first.</p>
+            <div className="tree-navigation">
+              <button onClick={() => setTreePage(Math.max(0, treePage - 1))} disabled={treePage === 0}>← Previous</button>
+              <label>MK section <input type="number" min="1" max="500" value={treePage + 1} onChange={(e) => setTreePage(clamp(Number(e.target.value) - 1, 0, 499))} /></label>
+              <button onClick={() => setTreePage(Math.min(499, treePage + 1))} disabled={treePage === 499}>Next →</button>
+            </div>
+            <div className="tree-root">RIFT CORE • 20 BRANCHES</div>
+            <div className="upgrade-tree">
+              {PERMANENT_FAMILIES.map((family, familyIndex) => <div className="tree-branch" key={family.id}>
+                <h3 style={{color: family.color}}>{family.icon} {family.name}</h3>
+                {PERMANENT_UPGRADES.slice(familyIndex * 2500 + treePage * 5, familyIndex * 2500 + treePage * 5 + 5).map((upgrade) => {
+                  const owned = permanentPurchases[upgrade.id] === true;
+                  const previous = upgrade.id.replace(/-\d+$/, `-${upgrade.tier - 1}`);
+                  const needsPrevious = upgrade.tier > 1 && !permanentPurchases[previous];
+                  const needsRebirth = upgrade.tier > 1 && rebirths < upgrade.tier;
+                  return <button key={upgrade.id} className={`tree-node ${owned ? "owned" : ""}`} disabled={owned || needsPrevious || needsRebirth || shards < upgrade.cost} onClick={() => buyPermanentUpgrade(upgrade)} style={{"--upgrade": upgrade.color} as React.CSSProperties}>
+                    <strong>{upgrade.name}</strong><small>{upgrade.description}</small>
+                    <span>{owned ? "✓ OWNED" : needsRebirth ? `Rebirth ${upgrade.tier} required` : needsPrevious ? `Buy MK ${upgrade.tier - 1} first` : `${upgrade.cost.toLocaleString()} shards`}</span>
+                  </button>;
+                })}
+              </div>)}
             </div>
           </section>
         )}
